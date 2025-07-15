@@ -22,7 +22,7 @@ builder.Services.AddCors(options =>
 var botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
 if (string.IsNullOrEmpty(botToken))
 {
-    var botToken ="7583651902:AAEdGhbNr9QjeNNYhvApa4jlphfDDu2C-fs";
+     botToken ="7583651902:AAEdGhbNr9QjeNNYhvApa4jlphfDDu2C-fs";
 }
 
 Console.WriteLine($"✅ Bot token loaded: {botToken.Substring(0, 10)}...");
