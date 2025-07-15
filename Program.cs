@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -18,8 +18,15 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Bot Token
-var botToken = "7583651902:AAEdGhbNr9QjeNNYhvApa4jlphfDDu2C-fs";
+// Bot Token از Environment Variable
+var botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+if (string.IsNullOrEmpty(botToken))
+{
+    Console.WriteLine("❌ TELEGRAM_BOT_TOKEN not found!");
+    throw new Exception("Bot token is required");
+}
+
+Console.WriteLine($"✅ Bot token loaded: {botToken.Substring(0, 10)}...");
 
 builder.Services.AddSingleton<ITelegramBotClient>(new TelegramBotClient(botToken));
 builder.Services.AddHostedService<MafiaBotService>();
@@ -33,8 +40,9 @@ app.UseRouting();
 
 app.MapHub<GameHub>("/gameHub");
 
-// Port from Railway
-var port = Environment.GetEnvironmentVariable("PORT") ?? "3000";
+// Port از Railway (پیش‌فرض 8080)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+Console.WriteLine($"🚀 Starting server on port {port}");
 app.Run($"http://0.0.0.0:{port}");
 
 // GameHub - مدیریت WebRTC و بازی
@@ -135,8 +143,19 @@ public class MafiaBotService : BackgroundService
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _bot.StartReceiving(HandleUpdate, HandleError, cancellationToken: stoppingToken);
-        await Task.Delay(Timeout.Infinite, stoppingToken);
+        try
+        {
+            var me = await _bot.GetMeAsync(stoppingToken);
+            Console.WriteLine($"✅ Bot @{me.Username} started successfully!");
+            
+            _bot.StartReceiving(HandleUpdate, HandleError, cancellationToken: stoppingToken);
+            await Task.Delay(Timeout.Infinite, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to start bot: {ex.Message}");
+            throw;
+        }
     }
     
     private async Task HandleUpdate(ITelegramBotClient bot, Update update, CancellationToken ct)
@@ -146,9 +165,24 @@ public class MafiaBotService : BackgroundService
             var message = update.Message;
             var chatId = message.Chat.Id;
             
+            Console.WriteLine($"📩 Received: {message.Text} from {message.From?.Username}");
+            
             if (message.Text == "/start")
             {
-                var gameUrl = $"{Environment.GetEnvironmentVariable("APP_URL")}/index.html";
+                // APP_URL از Environment Variable
+                var appUrl = Environment.GetEnvironmentVariable("APP_URL");
+                if (string.IsNullOrEmpty(appUrl))
+                {
+                    await bot.SendTextMessageAsync(
+                        chatId,
+                        "⚠️ بازی هنوز آماده نیست! لطفاً بعداً امتحان کنید.",
+                        cancellationToken: ct
+                    );
+                    Console.WriteLine("❌ APP_URL not configured!");
+                    return;
+                }
+                
+                var gameUrl = $"{appUrl}/index.html";
                 var keyboard = new InlineKeyboardMarkup(new[]
                 {
                     new[] { InlineKeyboardButton.WithWebApp("🎮 شروع بازی", new WebAppInfo { Url = gameUrl }) }
@@ -162,13 +196,15 @@ public class MafiaBotService : BackgroundService
                     replyMarkup: keyboard,
                     cancellationToken: ct
                 );
+                
+                Console.WriteLine($"✅ Sent game link to {message.From?.Username}");
             }
         }
     }
     
     private Task HandleError(ITelegramBotClient bot, Exception ex, CancellationToken ct)
     {
-        Console.WriteLine($"Error: {ex.Message}");
+        Console.WriteLine($"❌ Telegram Error: {ex.Message}");
         return Task.CompletedTask;
     }
 }
