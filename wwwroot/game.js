@@ -1,511 +1,455 @@
-// ===== تنظیمات اولیه =====
+// اتصال SignalR
 let connection = null;
 let localStream = null;
 let peerConnections = {};
+let remoteStreams = {};
 let currentRoom = null;
-let currentUsername = null;
-let myRole = null;
-let isAlive = true;
-let remoteStreams = {}; // ذخیره stream ها
+let playerName = null;
 
-// WebRTC Config با TURN Server
+// تنظیمات ICE Servers با TURN سرور
 const rtcConfig = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        // TURN Server رایگان (محدودیت داره)
         {
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
             credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
         }
-    ]
+    ],
+    iceCandidatePoolSize: 10
 };
 
-// ===== توابع اصلی =====
-
-// شروع بازی
-async function joinGame() {
-    console.log("🎮 Starting join game process...");
-    
-    const username = document.getElementById('username').value.trim();
-    const roomCode = document.getElementById('roomCode').value.trim();
-    
-    if (!username || !roomCode) {
-        alert('❌ لطفا نام کاربری و کد اتاق را وارد کنید');
-        return;
-    }
-    
-    currentRoom = roomCode;
-    currentUsername = username;
-    
-    console.log("📝 Room:", roomCode, "Username:", username);
-    
+// شروع اتصال
+async function initializeConnection() {
     try {
-        // 1. اتصال به SignalR
-        await connectToHub();
-        console.log("✅ SignalR connected!");
-        
-        // 2. دسترسی به دوربین
-        await setupCamera();
-        
-        // 3. ورود به اتاق
-        console.log("🚪 Joining room...");
-        await connection.invoke("JoinRoom", roomCode, username);
-        console.log("✅ JoinRoom invoked successfully!");
-        
-        // 4. تغییر صفحه
-        document.getElementById('loginScreen').classList.remove('active');
-        document.getElementById('gameScreen').classList.add('active');
-        document.getElementById('roomInfo').textContent = `اتاق: ${roomCode}`;
-        
-    } catch (error) {
-        console.error("❌ Error in joinGame:", error);
-        alert('خطا در اتصال به بازی: ' + error.message);
-    }
-}
+        connection = new signalR.HubConnectionBuilder()
+            .withUrl(`${window.location.origin}/gameHub`)
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
 
-// اتصال به SignalR Hub
-async function connectToHub() {
-    console.log("🔌 Connecting to SignalR hub...");
-    
-    connection = new signalR.HubConnectionBuilder()
-        .withUrl("/gameHub")
-        .configureLogging(signalR.LogLevel.Information)
-        .withAutomaticReconnect()
-        .build();
-    
-    // تنظیم Event Handlers
-    setupSignalRHandlers();
-    
-    // شروع اتصال
-    try {
+        // Event handlers
+        connection.on("ReceiveMessage", handleReceiveMessage);
+        connection.on("PlayerJoined", handlePlayerJoined);
+        connection.on("PlayerLeft", handlePlayerLeft);
+        connection.on("ReceiveOffer", handleOffer);
+        connection.on("ReceiveAnswer", handleAnswer);
+        connection.on("ReceiveIceCandidate", handleIceCandidate);
+        connection.on("GameStarted", handleGameStarted);
+        connection.on("PhaseChanged", handlePhaseChanged);
+
         await connection.start();
-        console.log("✅ SignalR connection established!");
-        console.log("📍 Connection ID:", connection.connectionId);
-    } catch (err) {
-        console.error("❌ SignalR connection failed:", err);
-        throw err;
-    }
-    
-    // مدیریت قطع اتصال
-    connection.onclose(async () => {
-        console.log("🔴 SignalR disconnected!");
-        alert('اتصال قطع شد! در حال تلاش مجدد...');
-    });
-}
-
-// تنظیم handlers برای SignalR
-function setupSignalRHandlers() {
-    console.log("📡 Setting up SignalR handlers...");
-    
-    // بازیکن جدید
-    connection.on("PlayerJoined", (player) => {
-        console.log("👤 Player joined:", player);
-        if (player.connectionId !== connection.connectionId) {
-            setTimeout(() => handlePlayerJoined(player), 1000); // Delay برای اطمینان
-        }
-    });
-    
-    // آپدیت اتاق
-    connection.on("RoomUpdate", (players) => {
-        console.log("🔄 Room update:", players);
-        updatePlayersList(players);
-        // برای هر بازیکن که peer connection نداریم، بسازیم
-        players.forEach(player => {
-            if (player.connectionId !== connection.connectionId && !peerConnections[player.connectionId]) {
-                console.log("🆕 Creating connection for existing player:", player.username);
-                handlePlayerJoined(player);
-            }
-        });
-    });
-    
-    // پیام چت
-    connection.on("ReceiveMessage", (username, message) => {
-        console.log("💬 Message:", username, message);
-        addChatMessage(username, message);
-    });
-    
-    // WebRTC Signaling
-    connection.on("ReceiveOffer", handleOffer);
-    connection.on("ReceiveAnswer", handleAnswer);
-    connection.on("ReceiveIceCandidate", handleIceCandidate);
-    
-    // بازی
-    connection.on("GameStarted", handleGameStart);
-    connection.on("PhaseChanged", handlePhaseChange);
-}
-
-// دسترسی به دوربین
-async function setupCamera() {
-    console.log("📹 Setting up camera...");
-    
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 }
-            },
-            audio: true
-        });
+        console.log("✅ SignalR Connected!");
         
+        return true;
+    } catch (err) {
+        console.error("❌ SignalR Connection Error:", err);
+        return false;
+    }
+}
+
+// دریافت دسترسی به دوربین - بهینه شده برای موبایل
+async function getLocalStream() {
+    try {
+        // تنظیمات بهینه برای موبایل و دسکتاپ
+        const constraints = {
+            video: {
+                width: { ideal: 640, max: 1280 },
+                height: { ideal: 480, max: 720 },
+                facingMode: 'user', // دوربین جلو برای موبایل
+                frameRate: { ideal: 30, max: 30 }
+            },
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        };
+
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // نمایش ویدیو محلی
         const localVideo = document.getElementById('localVideo');
         if (localVideo) {
             localVideo.srcObject = localStream;
-            localVideo.muted = true; // جلوگیری از echo
-            console.log("✅ Camera setup complete!");
+            localVideo.muted = true; // جلوگیری از اکو
+            
+            // اطمینان از پخش ویدیو در موبایل
+            localVideo.setAttribute('playsinline', '');
+            localVideo.setAttribute('autoplay', '');
+            
+            try {
+                await localVideo.play();
+            } catch (e) {
+                console.log("⚠️ Autoplay blocked, user needs to interact");
+            }
         }
+        
+        console.log("✅ Camera access granted!");
+        return true;
     } catch (err) {
-        console.error("❌ Camera access denied:", err);
-        alert('⚠️ دسترسی به دوربین داده نشد. بدون ویدیو ادامه میدهیم.');
-        localStream = null;
+        console.error("❌ Camera access error:", err);
+        alert('خطا در دسترسی به دوربین: ' + err.message);
+        return false;
     }
 }
 
-// ===== مدیریت بازیکنان =====
+// ورود به بازی
+async function joinGame() {
+    playerName = document.getElementById('playerName').value.trim();
+    currentRoom = document.getElementById('roomCode').value.trim();
 
-// بازیکن جدید وارد شد
-async function handlePlayerJoined(player) {
-    if (player.connectionId === connection.connectionId) {
-        console.log("👤 That's me, skipping...");
+    if (!playerName || !currentRoom) {
+        alert('لطفا نام و کد اتاق را وارد کنید!');
         return;
     }
-    
-    console.log("🤝 Setting up peer connection for:", player.username);
-    
-    try {
-        // ساخت peer connection
-        const pc = new RTCPeerConnection(rtcConfig);
-        peerConnections[player.connectionId] = pc;
-        
-        // Connection state monitoring
-        pc.onconnectionstatechange = () => {
-            console.log(`📡 Connection state with ${player.username}:`, pc.connectionState);
-        };
-        
-        pc.oniceconnectionstatechange = () => {
-            console.log(`🧊 ICE state with ${player.username}:`, pc.iceConnectionState);
-        };
-        
-        // اضافه کردن local stream
-        if (localStream) {
-            localStream.getTracks().forEach(track => {
-                console.log(`📤 Adding ${track.kind} track to ${player.username}`);
-                pc.addTrack(track, localStream);
-            });
-        }
-        
-        // دریافت remote stream
-        pc.ontrack = (event) => {
-            console.log("📺 Received remote stream from:", player.username, event);
-            if (event.streams && event.streams[0]) {
-                remoteStreams[player.connectionId] = event.streams[0];
-                addVideoElement(player.connectionId, player.username, event.streams[0]);
-            }
-        };
-        
-        // ICE candidates
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log("🧊 Sending ICE candidate to:", player.username);
-                connection.invoke("SendIceCandidate", currentRoom, player.connectionId, event.candidate)
-                    .catch(err => console.error("Failed to send ICE:", err));
-            }
-        };
-        
-        // ساخت offer
-        console.log("📤 Creating offer for:", player.username);
-        const offer = await pc.createOffer({
-            offerToReceiveVideo: true,
-            offerToReceiveAudio: true
-        });
-        await pc.setLocalDescription(offer);
-        await connection.invoke("SendOffer", currentRoom, player.connectionId, offer);
-        
-        console.log("✅ Offer sent to:", player.username);
-        
-    } catch (error) {
-        console.error("❌ Error in handlePlayerJoined:", error);
-    }
-}
 
-// آپدیت لیست بازیکنان
-function updatePlayersList(players) {
-    console.log("📋 Updating players list:", players.length, "players");
-    
-    const playersDiv = document.getElementById('players');
-    if (!playersDiv) return;
-    
-    playersDiv.innerHTML = '<h4>بازیکنان:</h4>';
-    
-    players.forEach(player => {
-        const playerDiv = document.createElement('div');
-        playerDiv.className = 'player-item';
-        playerDiv.textContent = player.username;
-        playerDiv.id = 'player-' + player.connectionId;
-        
-        // نشانه اتصال
-        if (peerConnections[player.connectionId]) {
-            const state = peerConnections[player.connectionId].connectionState;
-            playerDiv.textContent += ` (${state === 'connected' ? '✅' : '⏳'})`;
-        }
-        
-        playersDiv.appendChild(playerDiv);
-    });
-}
-
-// ===== ویدیو =====
-
-// اضافه کردن ویدیو با قابلیت fullscreen
-function addVideoElement(connectionId, username, stream) {
-    console.log("🎥 Adding video for:", username, "Stream active:", stream.active);
-    
-    // چک کن قبلا اضافه نشده باشه
-    let container = document.getElementById(`video-${connectionId}`);
-    if (container) {
-        console.log("Updating existing video for:", username);
-        const video = container.querySelector('video');
-        if (video) {
-            video.srcObject = stream;
+    // ابتدا اتصال SignalR
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+        const connected = await initializeConnection();
+        if (!connected) {
+            alert('خطا در اتصال به سرور!');
             return;
         }
     }
+
+    // سپس دوربین
+    const cameraOk = await getLocalStream();
+    if (!cameraOk) {
+        return;
+    }
+
+    // ورود به اتاق
+    try {
+        await connection.invoke("JoinRoom", currentRoom, playerName);
+        console.log(`✅ Joined room: ${currentRoom}`);
+        
+        // نمایش صفحه بازی
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('gameScreen').style.display = 'block';
+        
+        // نمایش دکمه شروع بازی
+        document.getElementById('startGameBtn').style.display = 'block';
+    } catch (err) {
+        console.error("❌ Join room error:", err);
+        alert('خطا در ورود به اتاق: ' + err.toString());
+    }
+}
+
+// هندل کردن ورود بازیکن جدید
+async function handlePlayerJoined(playerId, playerName) {
+    console.log(`👤 Player joined: ${playerName} (${playerId})`);
     
-    container = document.createElement('div');
-    container.className = 'video-container';
-    container.id = `video-${connectionId}`;
+    if (!playerId || playerId === connection.connectionId) {
+        return;
+    }
+
+    // اضافه کردن کادر ویدیو برای بازیکن جدید
+    createVideoElement(playerId, playerName);
     
+    // شروع peer connection با تاخیر کوتاه
+    setTimeout(() => {
+        createPeerConnection(playerId, true);
+    }, 1000);
+}
+
+// ایجاد المان ویدیو برای بازیکن
+function createVideoElement(playerId, playerName) {
+    // بررسی وجود قبلی
+    if (document.getElementById(`video-${playerId}`)) {
+        return;
+    }
+
+    const videoContainer = document.createElement('div');
+    videoContainer.className = 'video-container';
+    videoContainer.id = `container-${playerId}`;
+
     const video = document.createElement('video');
+    video.id = `video-${playerId}`;
     video.autoplay = true;
     video.playsInline = true;
     video.muted = false;
-    video.srcObject = stream;
+    video.onclick = () => toggleFullscreen(video);
+
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'player-name';
+    nameLabel.textContent = playerName;
+
+    videoContainer.appendChild(video);
+    videoContainer.appendChild(nameLabel);
     
-    // اضافه کردن click handler برای fullscreen
-    video.addEventListener('click', () => toggleFullscreen(video));
-    
-    // Debug: بررسی tracks
-    stream.getTracks().forEach(track => {
-        console.log(`📹 Track for ${username}:`, track.kind, track.enabled, track.readyState);
-    });
-    
-    const label = document.createElement('div');
-    label.className = 'video-label';
-    label.textContent = username;
-    
-    container.appendChild(video);
-    container.appendChild(label);
-    
-    const videoGrid = document.getElementById('videoGrid');
-    if (videoGrid) {
-        videoGrid.appendChild(container);
-    }
-    
-    // Force play
-    video.play().catch(e => console.error("Video play failed:", e));
+    document.getElementById('remoteVideos').appendChild(videoContainer);
+    console.log(`✅ Video element created for ${playerName}`);
 }
 
-// تابع fullscreen
-function toggleFullscreen(video) {
-    if (!document.fullscreenElement) {
-        // رفتن به fullscreen
-        if (video.requestFullscreen) {
-            video.requestFullscreen();
-        } else if (video.webkitRequestFullscreen) {
-            video.webkitRequestFullscreen();
-        } else if (video.msRequestFullscreen) {
-            video.msRequestFullscreen();
-        }
-    } else {
-        // خروج از fullscreen
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
-        }
+// ایجاد Peer Connection
+async function createPeerConnection(peerId, isInitiator = false) {
+    if (peerConnections[peerId]) {
+        console.log(`⚠️ Peer connection already exists for ${peerId}`);
+        return;
     }
-}
 
-// ===== WebRTC Handlers =====
-
-async function handleOffer(senderId, offer) {
-    console.log("📨 Received offer from:", senderId);
-    
     try {
-        let pc = peerConnections[senderId];
-        
-        // اگر peer connection وجود نداره، بسازش
-        if (!pc) {
-            console.log("🆕 Creating new peer connection for offer");
-            pc = new RTCPeerConnection(rtcConfig);
-            peerConnections[senderId] = pc;
+        const pc = new RTCPeerConnection(rtcConfig);
+        peerConnections[peerId] = pc;
+
+        // اضافه کردن local stream
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+                console.log(`✅ Added ${track.kind} track to peer ${peerId}`);
+            });
+        }
+
+        // دریافت remote stream
+        pc.ontrack = (event) => {
+            console.log(`📹 Received ${event.track.kind} track from ${peerId}`);
             
-            // Connection monitoring
-            pc.onconnectionstatechange = () => {
-                console.log(`📡 Connection state (answer):`, pc.connectionState);
-            };
-            
-            if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    console.log(`📤 Adding ${track.kind} track in answer`);
-                    pc.addTrack(track, localStream);
-                });
+            if (!remoteStreams[peerId]) {
+                remoteStreams[peerId] = new MediaStream();
             }
             
-            pc.ontrack = (event) => {
-                console.log("📺 Received track in offer handler:", event);
-                if (event.streams && event.streams[0]) {
-                    const players = Array.from(document.querySelectorAll('.player-item'));
-                    const player = players.find(p => p.id === `player-${senderId}`);
-                    const username = player ? player.textContent.split(' ')[0] : 'Unknown';
-                    
-                    remoteStreams[senderId] = event.streams[0];
-                    addVideoElement(senderId, username, event.streams[0]);
-                }
-            };
+            remoteStreams[peerId].addTrack(event.track);
             
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    connection.invoke("SendIceCandidate", currentRoom, senderId, event.candidate)
-                        .catch(err => console.error("Failed to send ICE:", err));
-                }
-            };
+            const remoteVideo = document.getElementById(`video-${peerId}`);
+            if (remoteVideo && remoteVideo.srcObject !== remoteStreams[peerId]) {
+                remoteVideo.srcObject = remoteStreams[peerId];
+                
+                // اطمینان از پخش در موبایل
+                remoteVideo.play().catch(e => {
+                    console.error('❌ Video play error:', e);
+                });
+            }
+        };
+
+        // ارسال ICE candidates
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log(`🧊 Sending ICE candidate to ${peerId}`);
+                connection.invoke("SendIceCandidate", currentRoom, peerId, 
+                    JSON.stringify(event.candidate));
+            }
+        };
+
+        // مانیتور وضعیت اتصال
+        pc.onconnectionstatechange = () => {
+            console.log(`📡 Connection state for ${peerId}: ${pc.connectionState}`);
+            updateConnectionStatus(peerId, pc.connectionState);
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🧊 ICE state for ${peerId}: ${pc.iceConnectionState}`);
+        };
+
+        // اگر initiator هستیم، offer بفرستیم
+        if (isInitiator) {
+            console.log(`📤 Creating offer for ${peerId}`);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await connection.invoke("SendOffer", currentRoom, peerId, 
+                JSON.stringify(offer));
+        }
+
+        return pc;
+    } catch (err) {
+        console.error(`❌ Error creating peer connection for ${peerId}:`, err);
+    }
+}
+
+// دریافت Offer
+async function handleOffer(fromId, offer) {
+    console.log(`📥 Received offer from ${fromId}`);
+    
+    try {
+        // ایجاد peer connection اگر وجود ندارد
+        if (!peerConnections[fromId]) {
+            await createPeerConnection(fromId, false);
         }
         
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const pc = peerConnections[fromId];
+        if (!pc) return;
+
+        // تنظیم remote description
+        await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
+        
+        // ایجاد و ارسال answer
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        await connection.invoke("SendAnswer", currentRoom, senderId, answer);
         
-        console.log("✅ Answer sent!");
+        await connection.invoke("SendAnswer", currentRoom, fromId, 
+            JSON.stringify(answer));
         
-    } catch (error) {
-        console.error("❌ Error in handleOffer:", error);
+        console.log(`✅ Answer sent to ${fromId}`);
+    } catch (err) {
+        console.error(`❌ Error handling offer from ${fromId}:`, err);
     }
 }
 
-async function handleAnswer(senderId, answer) {
-    console.log("📨 Received answer from:", senderId);
+// دریافت Answer
+async function handleAnswer(fromId, answer) {
+    console.log(`📥 Received answer from ${fromId}`);
     
     try {
-        const pc = peerConnections[senderId];
-        if (pc) {
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            console.log("✅ Answer processed!");
-        } else {
-            console.error("⚠️ No peer connection found for:", senderId);
+        const pc = peerConnections[fromId];
+        if (!pc) {
+            console.error(`❌ No peer connection for ${fromId}`);
+            return;
         }
-    } catch (error) {
-        console.error("❌ Error in handleAnswer:", error);
+
+        await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
+        console.log(`✅ Answer processed from ${fromId}`);
+    } catch (err) {
+        console.error(`❌ Error handling answer from ${fromId}:`, err);
     }
 }
 
-async function handleIceCandidate(senderId, candidate) {
-    console.log("🧊 Received ICE candidate from:", senderId);
-    
+// دریافت ICE Candidate
+async function handleIceCandidate(fromId, candidate) {
     try {
-        const pc = peerConnections[senderId];
-        if (pc && candidate) {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            console.log("✅ ICE candidate added");
+        const pc = peerConnections[fromId];
+        if (!pc) {
+            console.error(`❌ No peer connection for ${fromId}`);
+            return;
         }
-    } catch (error) {
-        console.error("❌ Error adding ICE candidate:", error);
+
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+        console.log(`✅ ICE candidate added from ${fromId}`);
+    } catch (err) {
+        console.error(`❌ Error handling ICE candidate from ${fromId}:`, err);
     }
 }
 
-// ===== چت =====
+// هندل خروج بازیکن
+function handlePlayerLeft(playerId) {
+    console.log(`👋 Player left: ${playerId}`);
+    
+    // بستن peer connection
+    if (peerConnections[playerId]) {
+        peerConnections[playerId].close();
+        delete peerConnections[playerId];
+    }
+    
+    // حذف stream
+    delete remoteStreams[playerId];
+    
+    // حذف المان ویدیو
+    const container = document.getElementById(`container-${playerId}`);
+    if (container) {
+        container.remove();
+    }
+}
 
+// ارسال پیام
 function sendMessage() {
     const input = document.getElementById('messageInput');
     const message = input.value.trim();
     
-    if (message && connection && isAlive) {
-        console.log("📤 Sending message:", message);
+    if (message && connection && currentRoom) {
         connection.invoke("SendMessage", currentRoom, message)
-            .catch(err => console.error("❌ Failed to send message:", err));
+            .catch(err => console.error('❌ Send message error:', err));
         input.value = '';
     }
 }
 
-function addChatMessage(username, message) {
+// دریافت پیام
+function handleReceiveMessage(sender, message) {
     const messagesDiv = document.getElementById('messages');
-    if (!messagesDiv) return;
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = 'message';
-    messageEl.innerHTML = `<span class="username">${username}:</span> ${message}`;
-    messagesDiv.appendChild(messageEl);
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message';
+    messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+    messagesDiv.appendChild(messageElement);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// ===== مدیریت بازی =====
-
-function createRoom() {
-    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    document.getElementById('roomCode').value = roomCode;
-    alert(`کد اتاق شما: ${roomCode}`);
+// شروع بازی
+function startGame() {
+    if (!connection || !currentRoom) {
+        alert('❌ ابتدا وارد اتاق شوید!');
+        return;
+    }
+    
+    console.log("🎮 Starting game...");
+    connection.invoke("StartGame", currentRoom)
+        .then(() => {
+            console.log("✅ Game start requested!");
+            document.getElementById('startGameBtn').style.display = 'none';
+        })
+        .catch(err => {
+            console.error("❌ Failed to start game:", err);
+            alert('خطا در شروع بازی: ' + err.toString());
+        });
 }
 
-function handleGameStart(roles) {
+// هندل شروع بازی
+function handleGameStarted(roles) {
     console.log("🎮 Game started! Roles:", roles);
-    myRole = roles[connection.connectionId];
-    
-    const roleInfo = document.getElementById('roleInfo');
-    if (roleInfo) {
-        roleInfo.textContent = `نقش شما: ${translateRole(myRole)}`;
-    }
-    
-    const startBtn = document.getElementById('startBtn');
-    if (startBtn) {
-        startBtn.style.display = 'none';
+    document.getElementById('gamePhase').textContent = 'بازی شروع شد!';
+    // نمایش نقش بازیکن
+    if (roles[connection.connectionId]) {
+        alert(`نقش شما: ${roles[connection.connectionId]}`);
     }
 }
 
-function handlePhaseChange(phase) {
-    console.log("🔄 Phase changed to:", phase);
-    
-    const phaseInfo = document.getElementById('phaseInfo');
-    if (phaseInfo) {
-        phaseInfo.textContent = `فاز: ${translatePhase(phase)}`;
+// هندل تغییر فاز
+function handlePhaseChanged(phase) {
+    console.log(`🌙 Phase changed to: ${phase}`);
+    document.getElementById('gamePhase').textContent = `فاز: ${phase}`;
+}
+
+// Fullscreen toggle
+function toggleFullscreen(video) {
+    if (!document.fullscreenElement) {
+        video.requestFullscreen().catch(err => {
+            console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
     }
-    
-    if (phase === 'Night' && !isAlive) {
-        const input = document.getElementById('messageInput');
-        if (input) input.disabled = true;
+}
+
+// نمایش وضعیت اتصال
+function updateConnectionStatus(peerId, state) {
+    const container = document.getElementById(`container-${peerId}`);
+    if (container) {
+        const statusBadge = container.querySelector('.connection-status') || 
+            document.createElement('div');
+        statusBadge.className = 'connection-status';
+        statusBadge.textContent = state;
+        
+        // رنگ بندی بر اساس وضعیت
+        switch(state) {
+            case 'connected':
+                statusBadge.style.backgroundColor = '#4CAF50';
+                break;
+            case 'connecting':
+                statusBadge.style.backgroundColor = '#FF9800';
+                break;
+            case 'failed':
+            case 'disconnected':
+                statusBadge.style.backgroundColor = '#F44336';
+                break;
+        }
+        
+        if (!container.querySelector('.connection-status')) {
+            container.appendChild(statusBadge);
+        }
     }
 }
 
-// ===== توابع کمکی =====
-
-function translateRole(role) {
-    const roles = {
-        'Mafia': '🔫 مافیا',
-        'Citizen': '👥 شهروند',
-        'Doctor': '👨‍⚕️ دکتر',
-        'Detective': '🕵️ کارآگاه'
-    };
-    return roles[role] || role;
-}
-
-function translatePhase(phase) {
-    const phases = {
-        'Waiting': '⏳ انتظار',
-        'Night': '🌙 شب',
-        'Day': '☀️ روز',
-        'Voting': '🗳️ رای‌گیری'
-    };
-    return phases[phase] || phase;
-}
-
-// Debug: نمایش وضعیت connections
+// Debug connections
 function debugConnections() {
-    console.log("🔍 Debug - Active connections:");
-    Object.keys(peerConnections).forEach(id => {
-        const pc = peerConnections[id];
-        console.log(`- ${id}:`, {
+    console.log("🔍 Debug Info:");
+    console.log("Local Stream:", localStream);
+    console.log("Peer Connections:", Object.keys(peerConnections));
+    console.log("Remote Streams:", Object.keys(remoteStreams));
+    
+    Object.entries(peerConnections).forEach(([peerId, pc]) => {
+        console.log(`Peer ${peerId}:`, {
             connectionState: pc.connectionState,
             iceConnectionState: pc.iceConnectionState,
             signalingState: pc.signalingState
@@ -513,22 +457,17 @@ function debugConnections() {
     });
 }
 
-// ===== Event Listeners =====
-
-// Enter key برای چت
+// کلید Enter برای ارسال پیام
 document.addEventListener('DOMContentLoaded', () => {
     const messageInput = document.getElementById('messageInput');
     if (messageInput) {
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
         });
     }
-    
-    // Debug button
-    window.debugConnections = debugConnections;
-    
-    console.log("✅ game.js loaded successfully!");
 });
 
-// Log version
-console.log("🎮 Mafia Game v1.1 - With Video Fix!");
+// Expose debug function
+window.debugConnections = debugConnections;
