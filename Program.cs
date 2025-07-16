@@ -185,7 +185,7 @@ public class MafiaBotService : BackgroundService
                 
                 await bot.SendTextMessageAsync(
                     chatId,
-                    "🎭 *بازی مافیا با ویدیو چت*\n\n" +
+                    "🎭 *بازی مافیا*\n\n" +
                     "برای شروع بازی روی دکمه زیر کلیک کنید:",
                     parseMode: ParseMode.Markdown,
                     replyMarkup: keyboard,
