@@ -5,84 +5,121 @@
 }
 
 body {
-    font-family: Vazir, Arial;
+    font-family: 'Vazir', Arial, sans-serif;
     background: #1a1a2e;
-    color: white;
+    color: #eee;
     direction: rtl;
+    overflow-x: hidden;
 }
 
-.screen {
-    display: none;
-    padding: 20px;
-    min-height: 100vh;
-}
-
-.screen.active {
-    display: block;
-}
-
-/* صفحه ورود */
+/* Login Screen */
 #loginScreen {
     display: flex;
-    flex-direction: column;
-    align-items: center;
     justify-content: center;
-    gap: 20px;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-#loginScreen h1 {
-    font-size: 3em;
-    margin-bottom: 30px;
+.login-container {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 400px;
 }
 
-#loginScreen input {
-    width: 300px;
-    padding: 15px;
+.login-container h1 {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: #fff;
+}
+
+.login-container input {
+    width: 100%;
+    padding: 1rem;
+    margin-bottom: 1rem;
     border: none;
-    border-radius: 10px;
-    background: #0f3460;
-    color: white;
-    font-size: 1.1em;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 16px;
 }
 
-#loginScreen button {
-    width: 300px;
-    padding: 15px;
+.login-container input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.login-container button {
+    width: 100%;
+    padding: 1rem;
     border: none;
-    border-radius: 10px;
-    background: #e94560;
+    border-radius: 8px;
+    background: #4CAF50;
     color: white;
-    font-size: 1.1em;
+    font-size: 18px;
+    font-weight: bold;
     cursor: pointer;
-    transition: 0.3s;
+    transition: background 0.3s;
 }
 
-#loginScreen button:hover {
-    background: #c73650;
+.login-container button:hover {
+    background: #45a049;
 }
 
-/* صفحه بازی */
-#gameInfo {
+/* Game Screen */
+#gameScreen {
+    display: none;
+    padding: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.game-header {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
     display: flex;
     justify-content: space-between;
-    padding: 10px 20px;
-    background: #0f3460;
-    border-radius: 10px;
-    margin-bottom: 20px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
-/* گرید ویدیو */
-#videoGrid {
+#gamePhase {
+    font-size: 1.5rem;
+    color: #4CAF50;
+}
+
+.start-btn {
+    background: #FF9800;
+    color: white;
+    border: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 5px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.start-btn:hover {
+    background: #F57C00;
+}
+
+/* Video Grid */
+.videos-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
 }
 
 .video-container {
     position: relative;
-    background: #16213e;
-    border-radius: 15px;
+    background: #000;
+    border-radius: 10px;
     overflow: hidden;
     aspect-ratio: 4/3;
 }
@@ -91,28 +128,39 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    cursor: pointer;
 }
 
-.video-label {
+.video-container .player-name {
     position: absolute;
     bottom: 10px;
     left: 10px;
-    background: rgba(0,0,0,0.7);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
     padding: 5px 10px;
     border-radius: 5px;
-    font-size: 0.9em;
+    font-size: 14px;
 }
 
-.video-container.dead {
-    filter: grayscale(100%);
-    opacity: 0.5;
+.video-container .connection-status {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: white;
 }
 
-/* چت */
-#chatSection {
-    background: #0f3460;
+#localVideo {
+    transform: scaleX(-1);
+}
+
+/* Chat */
+.chat-container {
+    background: rgba(0, 0, 0, 0.5);
     border-radius: 10px;
-    padding: 15px;
+    padding: 1rem;
     height: 300px;
     display: flex;
     flex-direction: column;
@@ -121,98 +169,76 @@ body {
 #messages {
     flex: 1;
     overflow-y: auto;
-    margin-bottom: 10px;
-    padding: 10px;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
 }
 
 .message {
-    margin-bottom: 10px;
-    padding: 8px 12px;
-    background: #16213e;
-    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 5px;
 }
 
-.message .username {
-    font-weight: bold;
-    color: #e94560;
-}
-
-#chatInput {
+.chat-input {
     display: flex;
-    gap: 10px;
+    gap: 0.5rem;
 }
 
 #messageInput {
     flex: 1;
-    padding: 10px;
+    padding: 0.5rem;
     border: none;
     border-radius: 5px;
-    background: #16213e;
+    background: rgba(255, 255, 255, 0.1);
     color: white;
+    font-size: 16px;
 }
 
-#chatInput button {
-    padding: 10px 20px;
+.chat-input button {
+    padding: 0.5rem 1rem;
     border: none;
     border-radius: 5px;
-    background: #e94560;
+    background: #4CAF50;
     color: white;
     cursor: pointer;
 }
 
-/* دکمه‌های بازی */
-#gameControls {
-    margin-top: 20px;
-    text-align: center;
+/* Fullscreen */
+video:fullscreen {
+    object-fit: contain;
+    background: #000;
 }
 
-#gameControls button {
-    padding: 12px 30px;
-    border: none;
-    border-radius: 8px;
-    background: #e94560;
-    color: white;
-    font-size: 1.1em;
-    cursor: pointer;
-    margin: 5px;
-}
-
-/* انیمیشن‌ها */
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
-.voting-target {
-    animation: pulse 1s infinite;
-    border: 3px solid #e94560;
-}
-
-/* موبایل */
+/* Mobile Responsive */
 @media (max-width: 768px) {
-    #videoGrid {
-        grid-template-columns: repeat(2, 1fr);
+    .videos-container {
+        grid-template-columns: 1fr 1fr;
     }
     
-    #chatSection {
-        height: 200px;
+    .video-container {
+        aspect-ratio: 3/4;
+    }
+    
+    .game-header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .chat-container {
+        height: 250px;
     }
 }
-video:fullscreen {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    background: black;
-}
 
-.video-container video {
-    cursor: pointer;
-    transition: transform 0.2s;
+@media (max-width: 480px) {
+    .videos-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .login-container {
+        padding: 1.5rem;
+    }
 }
-
-.video-container video:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
