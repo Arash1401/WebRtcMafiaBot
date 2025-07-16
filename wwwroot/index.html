@@ -3,77 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0e27">
     <title>بازی مافیا آنلاین</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- فونت فارسی -->
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/font-face.css" rel="stylesheet">
 </head>
 <body>
     <!-- صفحه ورود -->
-    <div id="loginScreen" class="screen">
+    <div id="loginScreen" class="screen active">
         <div class="login-container">
-            <h1>🎭 بازی مافیا</h1>
+            <h1 class="game-title">
+                <span class="title-icon">🎭</span>
+                <span>بازی مافیا</span>
+            </h1>
+            
             <div class="login-form">
-                <input type="text" id="playerName" placeholder="نام خود را وارد کنید" maxlength="20">
-                <input type="text" id="roomCode" placeholder="کد اتاق" maxlength="10">
-                <button onclick="joinGame()" class="btn-primary">ورود به بازی</button>
+                <!-- نام کاربری -->
+                <div class="input-group">
+                    <input type="text" id="playerName" placeholder="نام خود را وارد کنید" maxlength="20" autocomplete="off">
+                    <span class="input-icon">👤</span>
+                </div>
+                
+                <!-- کد اتاق -->
+                <div class="input-group">
+                    <input type="text" id="roomCode" placeholder="کد اتاق (اختیاری)" maxlength="10" autocomplete="off">
+                    <span class="input-icon">🏠</span>
+                </div>
+                
+                <!-- دکمه‌ها -->
+                <button onclick="createRoom()" class="btn-primary">
+                    <span>ساخت اتاق جدید</span>
+                    <span class="btn-icon">➕</span>
+                </button>
+                
+                <button onclick="joinRoom()" class="btn-secondary">
+                    <span>ورود به اتاق</span>
+                    <span class="btn-icon">🚪</span>
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- صفحه بازی -->
+    <!-- صفحه تنظیمات اتاق (برای سازنده) -->
+    <div id="roomSettingsScreen" class="screen" style="display: none;">
+        <div class="settings-container">
+            <h2>⚙️ تنظیمات اتاق</h2>
+            
+            <!-- کد اتاق -->
+            <div class="room-code-display">
+                <span>کد اتاق:</span>
+                <span id="settingsRoomCode" class="code-highlight"></span>
+                <button onclick="copyRoomCode()" class="copy-btn">📋</button>
+            </div>
+            
+            <!-- تنظیمات بازی -->
+            <div class="settings-grid">
+                <!-- تعداد بازیکنان -->
+                <div class="setting-item">
+                    <label>حداقل بازیکنان:</label>
+                    <select id="minPlayers">
+                        <option value="4">4 نفر</option>
+                        <option value="5">5 نفر</option>
+                        <option value="6" selected>6 نفر</option>
+                        <option value="8">8 نفر</option>
+                    </select>
+                </div>
+                
+                <!-- نقش‌ها -->
+                <div class="setting-item">
+                    <label>نقش‌های بازی:</label>
+                    <div class="roles-config">
+                        <label><input type="checkbox" checked> مافیا (2)</label>
+                        <label><input type="checkbox" checked> دکتر</label>
+                        <label><input type="checkbox" checked> کارآگاه</label>
+                        <label><input type="checkbox"> تک‌تیرانداز</label>
+                    </div>
+                </div>
+                
+                <!-- تم بازی -->
+                <div class="setting-item">
+                    <label>تم بازی:</label>
+                    <select id="gameTheme">
+                        <option value="classic">کلاسیک 🎭</option>
+                        <option value="modern">مدرن 🏙️</option>
+                        <option value="fantasy">فانتزی 🧙</option>
+                    </select>
+                </div>
+                
+                <!-- گرداننده بازی -->
+                <div class="setting-item">
+                    <label>گرداننده بازی:</label>
+                    <select id="gameMaster">
+                        <option value="auto">ربات (اتوماتیک) 🤖</option>
+                        <option value="player">بازیکن 👤</option>
+                    </select>
+                </div>
+                
+                <!-- نوع بازی -->
+                <div class="setting-item">
+                    <label>نوع ارتباط:</label>
+                    <div class="connection-type">
+                        <label><input type="checkbox" id="videoEnabled" checked> ویدیو 📹</label>
+                        <label><input type="checkbox" id="audioEnabled" checked> صدا 🎙️</label>
+                        <label><input type="checkbox" checked disabled> چت 💬</label>
+                    </div>
+                </div>
+                
+                <!-- کیفیت -->
+                <div class="setting-item">
+                    <label>کیفیت ویدیو:</label>
+                    <select id="videoQuality">
+                        <option value="low">پایین (اینترنت ضعیف)</option>
+                        <option value="medium" selected>متوسط</option>
+                        <option value="high">بالا</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button onclick="saveSettingsAndContinue()" class="btn-primary btn-large">
+                <span>ذخیره و ادامه</span>
+                <span>✅</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- صفحه اصلی بازی -->
     <div id="gameScreen" class="screen" style="display: none;">
         <!-- هدر بازی -->
         <div class="game-header">
             <div class="header-left">
-                <button onclick="toggleDebugPanel()" class="icon-btn" title="دیباگ">🐛</button>
-                <button onclick="toggleChat()" class="icon-btn chat-toggle" title="چت">💬</button>
-                <span class="badge" id="unreadCount" style="display: none;">0</span>
+                <!-- دکمه دیباگ فقط برای سازنده -->
+                <button onclick="toggleDebugPanel()" class="icon-btn debug-btn" title="دیباگ" style="display: none;">🐛</button>
+                <!-- پنل گاد فقط برای گرداننده -->
+                <button onclick="toggleGodPanel()" class="icon-btn god-btn" title="پنل مدیریت" style="display: none;">👑</button>
+                <button onclick="toggleChat()" class="icon-btn chat-toggle" title="چت">
+                    💬
+                    <span class="badge" id="unreadCount" style="display: none;">0</span>
+                </button>
             </div>
             
             <div class="header-center">
-                <span class="room-code">اتاق: <span id="roomCodeDisplay"></span></span>
-                <span id="connectionStatus" class="status-badge">آفلاین</span>
+                <div class="connection-info">
+                    <span class="room-code">اتاق: <span id="roomCodeDisplay"></span></span>
+                    <span class="players-count">
+                        <span id="onlinePlayersCount">0</span>/<span id="maxPlayersCount">12</span> 👥
+                    </span>
+                    <span id="connectionStatus" class="status-badge">آفلاین</span>
+                </div>
             </div>
             
             <div class="header-right">
+                <button onclick="toggleSettings()" class="icon-btn" title="تنظیمات">⚙️</button>
                 <button onclick="toggleFullscreen()" class="icon-btn" title="تمام صفحه">⛶</button>
+                <button onclick="leaveGame()" class="icon-btn leave-btn" title="خروج">🚪</button>
             </div>
         </div>
 
-        <!-- میز بازی -->
-        <div class="game-table-container">
-            <div class="game-table" id="gameTable">
-                <div class="table-center">
-                    <div id="gamePhase" class="phase-display">منتظر شروع بازی...</div>
-                    <button id="startGameBtn" onclick="startGame()" class="btn-start">شروع بازی</button>
-                    <div id="gameActions" class="game-actions" style="display: none;">
-                        <!-- دکمه‌های عملیات بازی -->
-                    </div>
-                </div>
-                
-                <!-- جایگاه بازیکنان دور میز -->
-                <div id="playersCircle" class="players-circle">
-                    <!-- بازیکن محلی -->
-                    <div class="player-seat local-player" id="localPlayerSeat">
-                        <div class="video-circle" onclick="toggleVideoSize(this)">
-                            <video id="localVideo" autoplay muted playsinline></video>
+        <!-- کانتینر اصلی بازی -->
+        <div class="game-container">
+            <!-- میز بازی -->
+            <div class="game-table-wrapper">
+                <div class="game-table" id="gameTable">
+                    <!-- محتوای روی میز -->
+                    <div class="table-content">
+                        <div id="gamePhase" class="phase-display">
+                            <span class="phase-icon">🌙</span>
+                            <span class="phase-text">منتظر بازیکنان...</span>
                         </div>
-                        <span class="player-name">شما</span>
+                        
+                        <div id="gameTimer" class="game-timer" style="display: none;">
+                            <span class="timer-value">00:00</span>
+                        </div>
+                        
+                        <div id="gameEvents" class="game-events">
+                            <!-- رویدادهای بازی -->
+                        </div>
+                        
+                        <button id="startGameBtn" onclick="startGame()" class="btn-start" style="display: none;">
+                            <span>شروع بازی</span>
+                            <span class="player-ready-count">(0/0)</span>
+                        </button>
+                    </div>
+                    
+                    <!-- جایگاه بازیکنان دور میز -->
+                    <div id="playersSeats" class="players-seats">
+                        <!-- 12 جایگاه برای بازیکنان -->
+                        <!-- جایگاه‌ها به صورت داینامیک اضافه می‌شوند -->
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- پنل چت -->
-        <div id="chatPanel" class="chat-panel collapsed">
-            <div class="chat-header" onclick="toggleChat()">
-                <span>💬 چت</span>
-                <span class="chat-arrow">◀</span>
+        <div id="chatPanel" class="side-panel chat-panel collapsed">
+            <div class="panel-header" onclick="toggleChat()">
+                <span class="panel-title">💬 چت گروهی</span>
+                <span class="panel-arrow">◀</span>
             </div>
-            <div class="chat-content">
+            <div class="panel-content">
                 <div id="messages" class="messages"></div>
                 <div class="message-input-container">
-                    <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
-                    <button onclick="sendMessage()" class="send-btn">➤</button>
+                    <input type="text" id="messageInput" placeholder="پیام خود را بنویسید..." maxlength="200">
+                    <button onclick="sendMessage()" class="send-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- پنل مدیریت گاد -->
+        <div id="godPanel" class="side-panel god-panel collapsed">
+            <div class="panel-header" onclick="toggleGodPanel()">
+                <span class="panel-title">👑 پنل مدیریت</span>
+                <span class="panel-arrow">◀</span>
+            </div>
+            <div class="panel-content">
+                <!-- لیست بازیکنان -->
+                <div class="god-section">
+                    <h3>بازیکنان:</h3>
+                    <div id="godPlayersList" class="god-players-list">
+                        <!-- لیست بازیکنان با کنترل‌ها -->
+                    </div>
+                </div>
+                
+                <!-- کنترل‌های بازی -->
+                <div class="god-section">
+                    <h3>کنترل بازی:</h3>
+                    <div class="god-controls">
+                        <button onclick="godStartDay()" class="god-btn">☀️ شروع روز</button>
+                        <button onclick="godStartNight()" class="god-btn">🌙 شروع شب</button>
+                        <button onclick="godStartVoting()" class="god-btn">🗳️ رای‌گیری</button>
+                        <button onclick="godPauseGame()" class="god-btn">⏸️ مکث</button>
+                    </div>
+                </div>
+                
+                <!-- تایمر -->
+                <div class="god-section">
+                    <h3>تایمر:</h3>
+                    <div class="timer-controls">
+                        <input type="number" id="godTimerMinutes" min="0" max="10" value="2">
+                        <span>دقیقه</span>
+                        <button onclick="godSetTimer()" class="god-btn-small">تنظیم</button>
+                    </div>
+                </div>
+                
+                <!-- رویدادها -->
+                <div class="god-section">
+                    <h3>ثبت رویداد:</h3>
+                    <textarea id="godEventText" placeholder="رویداد جدید..."></textarea>
+                    <button onclick="godLogEvent()" class="god-btn">ثبت</button>
                 </div>
             </div>
         </div>
@@ -84,22 +265,69 @@
                 <span>🐛 Debug Console</span>
                 <button onclick="toggleDebugPanel()" class="close-btn">✕</button>
             </div>
-            <div id="debugLogs" class="debug-logs"></div>
+            <div class="debug-tabs">
+                <button class="debug-tab active" onclick="switchDebugTab('logs')">Logs</button>
+                <button class="debug-tab" onclick="switchDebugTab('connections')">Connections</button>
+                <button class="debug-tab" onclick="switchDebugTab('stats')">Stats</button>
+            </div>
+            <div id="debugContent" class="debug-content">
+                <div id="debugLogs" class="debug-logs"></div>
+            </div>
             <div class="debug-actions">
                 <button onclick="clearDebugLogs()">Clear</button>
-                <button onclick="debugConnections()">Check Connections</button>
-                <button onclick="retryAllConnections()">Retry All</button>
+                <button onclick="debugConnections()">Check Status</button>
+                <button onclick="forceReconnectAll()">Force Reconnect</button>
+                <button onclick="testConnection()">Test Connection</button>
             </div>
+        </div>
+
+        <!-- پنل تنظیمات سریع -->
+        <div id="quickSettings" class="quick-settings" style="display: none;">
+            <h3>تنظیمات سریع</h3>
+            <div class="settings-list">
+                <label>
+                    <input type="checkbox" id="muteAll" onchange="toggleMuteAll()">
+                    <span>قطع صدای همه</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="hideVideos" onchange="toggleHideVideos()">
+                    <span>مخفی کردن ویدیوها</span>
+                </label>
+                <label>
+                    <span>کیفیت ویدیو:</span>
+                    <select id="quickVideoQuality" onchange="changeVideoQuality()">
+                        <option value="low">پایین</option>
+                        <option value="medium">متوسط</option>
+                        <option value="high">بالا</option>
+                    </select>
+                </label>
+            </div>
+            <button onclick="toggleSettings()" class="close-settings">بستن</button>
         </div>
 
         <!-- ویدیو بزرگ شده -->
         <div id="enlargedVideo" class="enlarged-video" style="display: none;" onclick="closeEnlargedVideo()">
             <video id="enlargedVideoElement" autoplay playsinline></video>
-            <span class="close-video">✕</span>
+            <div class="enlarged-info">
+                <span id="enlargedPlayerName"></span>
+                <button class="close-video" onclick="closeEnlargedVideo()">✕</button>
+            </div>
+        </div>
+
+        <!-- نمایش نوتیفیکیشن -->
+        <div id="notifications" class="notifications"></div>
+    </div>
+
+    <!-- لودینگ -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <span id="loadingText">در حال اتصال...</span>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/adapter-latest@latest/adapter.min.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
