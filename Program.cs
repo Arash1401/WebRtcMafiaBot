@@ -165,7 +165,7 @@ public class MafiaBotService : BackgroundService
             if (message.Text == "/start")
             {
                 // APP_URL از Environment Variable
-                var appUrl = "https://webrtcmafiabot-production-f54b.up.railway.app/index.html";
+                var appUrl = "https://webrtcmafiabot-production-f54b.up.railway.app";
                 if (string.IsNullOrEmpty(appUrl))
                 {
                     await bot.SendTextMessageAsync(
