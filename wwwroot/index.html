@@ -1,55 +1,105 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>بازی مافیا</title>
+    <title>بازی مافیا آنلاین</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <!-- صفحه ورود -->
-    <div id="loginScreen">
+    <div id="loginScreen" class="screen">
         <div class="login-container">
-            <h1>🎮 بازی مافیا</h1>
-            <input type="text" id="playerName" placeholder="نام خود را وارد کنید" required>
-            <input type="text" id="roomCode" placeholder="کد اتاق را وارد کنید" required>
-            <button onclick="joinGame()">ورود به بازی</button>
+            <h1>🎭 بازی مافیا</h1>
+            <div class="login-form">
+                <input type="text" id="playerName" placeholder="نام خود را وارد کنید" maxlength="20">
+                <input type="text" id="roomCode" placeholder="کد اتاق" maxlength="10">
+                <button onclick="joinGame()" class="btn-primary">ورود به بازی</button>
+            </div>
         </div>
     </div>
 
     <!-- صفحه بازی -->
-    <div id="gameScreen">
+    <div id="gameScreen" class="screen" style="display: none;">
+        <!-- هدر بازی -->
         <div class="game-header">
-            <h2 id="gamePhase">در انتظار بازیکنان...</h2>
-            <button id="startGameBtn" onclick="startGame()" class="start-btn">
-                🎮 شروع بازی
-            </button>
-        </div>
-
-        <div class="videos-container">
-            <!-- ویدیو محلی -->
-            <div class="video-container">
-                <video id="localVideo" autoplay muted playsinline></video>
-                <div class="player-name">شما</div>
+            <div class="header-left">
+                <button onclick="toggleDebugPanel()" class="icon-btn" title="دیباگ">🐛</button>
+                <button onclick="toggleChat()" class="icon-btn chat-toggle" title="چت">💬</button>
+                <span class="badge" id="unreadCount" style="display: none;">0</span>
             </div>
             
-            <!-- ویدیوهای ریموت -->
-            <div id="remoteVideos"></div>
+            <div class="header-center">
+                <span class="room-code">اتاق: <span id="roomCodeDisplay"></span></span>
+                <span id="connectionStatus" class="status-badge">آفلاین</span>
+            </div>
+            
+            <div class="header-right">
+                <button onclick="toggleFullscreen()" class="icon-btn" title="تمام صفحه">⛶</button>
+            </div>
         </div>
 
-        <!-- چت -->
-        <div class="chat-container">
-            <div id="messages"></div>
-            <div class="chat-input">
-                <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
-                <button onclick="sendMessage()">ارسال</button>
+        <!-- میز بازی -->
+        <div class="game-table-container">
+            <div class="game-table" id="gameTable">
+                <div class="table-center">
+                    <div id="gamePhase" class="phase-display">منتظر شروع بازی...</div>
+                    <button id="startGameBtn" onclick="startGame()" class="btn-start">شروع بازی</button>
+                    <div id="gameActions" class="game-actions" style="display: none;">
+                        <!-- دکمه‌های عملیات بازی -->
+                    </div>
+                </div>
+                
+                <!-- جایگاه بازیکنان دور میز -->
+                <div id="playersCircle" class="players-circle">
+                    <!-- بازیکن محلی -->
+                    <div class="player-seat local-player" id="localPlayerSeat">
+                        <div class="video-circle" onclick="toggleVideoSize(this)">
+                            <video id="localVideo" autoplay muted playsinline></video>
+                        </div>
+                        <span class="player-name">شما</span>
+                    </div>
+                </div>
             </div>
+        </div>
+
+        <!-- پنل چت -->
+        <div id="chatPanel" class="chat-panel collapsed">
+            <div class="chat-header" onclick="toggleChat()">
+                <span>💬 چت</span>
+                <span class="chat-arrow">◀</span>
+            </div>
+            <div class="chat-content">
+                <div id="messages" class="messages"></div>
+                <div class="message-input-container">
+                    <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
+                    <button onclick="sendMessage()" class="send-btn">➤</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- پنل دیباگ -->
+        <div id="debugPanel" class="debug-panel" style="display: none;">
+            <div class="debug-header">
+                <span>🐛 Debug Console</span>
+                <button onclick="toggleDebugPanel()" class="close-btn">✕</button>
+            </div>
+            <div id="debugLogs" class="debug-logs"></div>
+            <div class="debug-actions">
+                <button onclick="clearDebugLogs()">Clear</button>
+                <button onclick="debugConnections()">Check Connections</button>
+                <button onclick="retryAllConnections()">Retry All</button>
+            </div>
+        </div>
+
+        <!-- ویدیو بزرگ شده -->
+        <div id="enlargedVideo" class="enlarged-video" style="display: none;" onclick="closeEnlargedVideo()">
+            <video id="enlargedVideoElement" autoplay playsinline></video>
+            <span class="close-video">✕</span>
         </div>
     </div>
 
-    <!-- SignalR -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
-    <!-- Game Logic -->
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
