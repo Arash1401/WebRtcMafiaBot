@@ -1,59 +1,55 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="fa">
+<html lang="fa">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>بازی مافیا</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
 </head>
 <body>
-    <div id="app">
-        <!-- صفحه ورود -->
-        <div id="loginScreen" class="screen active">
-            <h1>🎭 بازی مافیا</h1>
-            <input type="text" id="username" placeholder="نام کاربری" maxlength="20">
-            <input type="text" id="roomCode" placeholder="کد اتاق" maxlength="6">
+    <!-- صفحه ورود -->
+    <div id="loginScreen">
+        <div class="login-container">
+            <h1>🎮 بازی مافیا</h1>
+            <input type="text" id="playerName" placeholder="نام خود را وارد کنید" required>
+            <input type="text" id="roomCode" placeholder="کد اتاق را وارد کنید" required>
             <button onclick="joinGame()">ورود به بازی</button>
-            <button onclick="createRoom()">ساخت اتاق جدید</button>
+        </div>
+    </div>
+
+    <!-- صفحه بازی -->
+    <div id="gameScreen">
+        <div class="game-header">
+            <h2 id="gamePhase">در انتظار بازیکنان...</h2>
+            <button id="startGameBtn" onclick="startGame()" class="start-btn">
+                🎮 شروع بازی
+            </button>
         </div>
 
-        <!-- صفحه بازی -->
-        <div id="gameScreen" class="screen">
-            <div id="gameInfo">
-                <span id="roomInfo">اتاق: </span>
-                <span id="phaseInfo">فاز: انتظار</span>
-                <span id="roleInfo">نقش: </span>
+        <div class="videos-container">
+            <!-- ویدیو محلی -->
+            <div class="video-container">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div class="player-name">شما</div>
             </div>
+            
+            <!-- ویدیوهای ریموت -->
+            <div id="remoteVideos"></div>
+        </div>
 
-            <!-- ویدیوها -->
-            <div id="videoGrid">
-                <!-- ویدیوی خود -->
-                <div class="video-container" id="localVideoContainer">
-                    <video id="localVideo" autoplay muted></video>
-                    <div class="video-label">شما</div>
-                </div>
-                <!-- ویدیوهای دیگران اینجا اضافه میشن -->
-            </div>
-
-            <!-- چت -->
-            <div id="chatSection">
-                <div id="messages"></div>
-                <div id="chatInput">
-                    <input type="text" id="messageInput" placeholder="پیام...">
-                    <button onclick="sendMessage()">ارسال</button>
-                </div>
-            </div>
-
-            <!-- دکمه‌های بازی -->
-            <div id="gameControls">
-                <button id="startBtn" onclick="startGame()" style="display:none">شروع بازی</button>
-                <div id="votingButtons" style="display:none"></div>
+        <!-- چت -->
+        <div class="chat-container">
+            <div id="messages"></div>
+            <div class="chat-input">
+                <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
+                <button onclick="sendMessage()">ارسال</button>
             </div>
         </div>
     </div>
 
+    <!-- SignalR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
+    <!-- Game Logic -->
     <script src="game.js"></script>
 </body>
 </html>
