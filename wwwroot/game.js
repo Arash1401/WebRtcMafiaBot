@@ -19,7 +19,7 @@ const rtcConfig = {
 // اتصال به SignalR
 async function connectToHub() {
     connection = new signalR.HubConnectionBuilder()
-        .withUrl("/gameHub")
+       .withUrl(`${window.location.origin}/gameHub`)
         .build();
     
     // Event Listeners
