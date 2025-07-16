@@ -6,12 +6,19 @@ let currentRoom = null;
 let currentUsername = null;
 let myRole = null;
 let isAlive = true;
+let remoteStreams = {}; // ذخیره stream ها
 
-// WebRTC Config
+// WebRTC Config با TURN Server
 const rtcConfig = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // TURN Server رایگان (محدودیت داره)
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
     ]
 };
 
@@ -95,13 +102,22 @@ function setupSignalRHandlers() {
     // بازیکن جدید
     connection.on("PlayerJoined", (player) => {
         console.log("👤 Player joined:", player);
-        handlePlayerJoined(player);
+        if (player.connectionId !== connection.connectionId) {
+            setTimeout(() => handlePlayerJoined(player), 1000); // Delay برای اطمینان
+        }
     });
     
     // آپدیت اتاق
     connection.on("RoomUpdate", (players) => {
         console.log("🔄 Room update:", players);
         updatePlayersList(players);
+        // برای هر بازیکن که peer connection نداریم، بسازیم
+        players.forEach(player => {
+            if (player.connectionId !== connection.connectionId && !peerConnections[player.connectionId]) {
+                console.log("🆕 Creating connection for existing player:", player.username);
+                handlePlayerJoined(player);
+            }
+        });
     });
     
     // پیام چت
@@ -126,18 +142,22 @@ async function setupCamera() {
     
     try {
         localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            },
             audio: true
         });
         
         const localVideo = document.getElementById('localVideo');
         if (localVideo) {
             localVideo.srcObject = localStream;
+            localVideo.muted = true; // جلوگیری از echo
             console.log("✅ Camera setup complete!");
         }
     } catch (err) {
         console.error("❌ Camera access denied:", err);
-        // ادامه بدون دوربین
+        alert('⚠️ دسترسی به دوربین داده نشد. بدون ویدیو ادامه میدهیم.');
         localStream = null;
     }
 }
@@ -158,28 +178,47 @@ async function handlePlayerJoined(player) {
         const pc = new RTCPeerConnection(rtcConfig);
         peerConnections[player.connectionId] = pc;
         
+        // Connection state monitoring
+        pc.onconnectionstatechange = () => {
+            console.log(`📡 Connection state with ${player.username}:`, pc.connectionState);
+        };
+        
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🧊 ICE state with ${player.username}:`, pc.iceConnectionState);
+        };
+        
         // اضافه کردن local stream
         if (localStream) {
             localStream.getTracks().forEach(track => {
+                console.log(`📤 Adding ${track.kind} track to ${player.username}`);
                 pc.addTrack(track, localStream);
             });
         }
         
         // دریافت remote stream
         pc.ontrack = (event) => {
-            console.log("📺 Received remote stream from:", player.username);
-            addVideoElement(player.connectionId, player.username, event.streams[0]);
+            console.log("📺 Received remote stream from:", player.username, event);
+            if (event.streams && event.streams[0]) {
+                remoteStreams[player.connectionId] = event.streams[0];
+                addVideoElement(player.connectionId, player.username, event.streams[0]);
+            }
         };
         
         // ICE candidates
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                connection.invoke("SendIceCandidate", currentRoom, player.connectionId, event.candidate);
+                console.log("🧊 Sending ICE candidate to:", player.username);
+                connection.invoke("SendIceCandidate", currentRoom, player.connectionId, event.candidate)
+                    .catch(err => console.error("Failed to send ICE:", err));
             }
         };
         
         // ساخت offer
-        const offer = await pc.createOffer();
+        console.log("📤 Creating offer for:", player.username);
+        const offer = await pc.createOffer({
+            offerToReceiveVideo: true,
+            offerToReceiveAudio: true
+        });
         await pc.setLocalDescription(offer);
         await connection.invoke("SendOffer", currentRoom, player.connectionId, offer);
         
@@ -204,30 +243,51 @@ function updatePlayersList(players) {
         playerDiv.className = 'player-item';
         playerDiv.textContent = player.username;
         playerDiv.id = 'player-' + player.connectionId;
+        
+        // نشانه اتصال
+        if (peerConnections[player.connectionId]) {
+            const state = peerConnections[player.connectionId].connectionState;
+            playerDiv.textContent += ` (${state === 'connected' ? '✅' : '⏳'})`;
+        }
+        
         playersDiv.appendChild(playerDiv);
     });
 }
 
 // ===== ویدیو =====
 
-// اضافه کردن ویدیو
+// اضافه کردن ویدیو با قابلیت fullscreen
 function addVideoElement(connectionId, username, stream) {
-    console.log("🎥 Adding video for:", username);
+    console.log("🎥 Adding video for:", username, "Stream active:", stream.active);
     
     // چک کن قبلا اضافه نشده باشه
-    if (document.getElementById(`video-${connectionId}`)) {
-        console.log("Video already exists for:", username);
-        return;
+    let container = document.getElementById(`video-${connectionId}`);
+    if (container) {
+        console.log("Updating existing video for:", username);
+        const video = container.querySelector('video');
+        if (video) {
+            video.srcObject = stream;
+            return;
+        }
     }
     
-    const container = document.createElement('div');
+    container = document.createElement('div');
     container.className = 'video-container';
     container.id = `video-${connectionId}`;
     
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
+    video.muted = false;
     video.srcObject = stream;
+    
+    // اضافه کردن click handler برای fullscreen
+    video.addEventListener('click', () => toggleFullscreen(video));
+    
+    // Debug: بررسی tracks
+    stream.getTracks().forEach(track => {
+        console.log(`📹 Track for ${username}:`, track.kind, track.enabled, track.readyState);
+    });
     
     const label = document.createElement('div');
     label.className = 'video-label';
@@ -240,6 +300,32 @@ function addVideoElement(connectionId, username, stream) {
     if (videoGrid) {
         videoGrid.appendChild(container);
     }
+    
+    // Force play
+    video.play().catch(e => console.error("Video play failed:", e));
+}
+
+// تابع fullscreen
+function toggleFullscreen(video) {
+    if (!document.fullscreenElement) {
+        // رفتن به fullscreen
+        if (video.requestFullscreen) {
+            video.requestFullscreen();
+        } else if (video.webkitRequestFullscreen) {
+            video.webkitRequestFullscreen();
+        } else if (video.msRequestFullscreen) {
+            video.msRequestFullscreen();
+        }
+    } else {
+        // خروج از fullscreen
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
 }
 
 // ===== WebRTC Handlers =====
@@ -248,27 +334,47 @@ async function handleOffer(senderId, offer) {
     console.log("📨 Received offer from:", senderId);
     
     try {
-        const pc = new RTCPeerConnection(rtcConfig);
-        peerConnections[senderId] = pc;
+        let pc = peerConnections[senderId];
         
-        if (localStream) {
-            localStream.getTracks().forEach(track => {
-                pc.addTrack(track, localStream);
-            });
+        // اگر peer connection وجود نداره، بسازش
+        if (!pc) {
+            console.log("🆕 Creating new peer connection for offer");
+            pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[senderId] = pc;
+            
+            // Connection monitoring
+            pc.onconnectionstatechange = () => {
+                console.log(`📡 Connection state (answer):`, pc.connectionState);
+            };
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    console.log(`📤 Adding ${track.kind} track in answer`);
+                    pc.addTrack(track, localStream);
+                });
+            }
+            
+            pc.ontrack = (event) => {
+                console.log("📺 Received track in offer handler:", event);
+                if (event.streams && event.streams[0]) {
+                    const players = Array.from(document.querySelectorAll('.player-item'));
+                    const player = players.find(p => p.id === `player-${senderId}`);
+                    const username = player ? player.textContent.split(' ')[0] : 'Unknown';
+                    
+                    remoteStreams[senderId] = event.streams[0];
+                    addVideoElement(senderId, username, event.streams[0]);
+                }
+            };
+            
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    connection.invoke("SendIceCandidate", currentRoom, senderId, event.candidate)
+                        .catch(err => console.error("Failed to send ICE:", err));
+                }
+            };
         }
         
-        pc.ontrack = (event) => {
-            console.log("📺 Received track in offer handler");
-            // ویدیو در handlePlayerJoined اضافه میشه
-        };
-        
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                connection.invoke("SendIceCandidate", currentRoom, senderId, event.candidate);
-            }
-        };
-        
-        await pc.setRemoteDescription(offer);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         await connection.invoke("SendAnswer", currentRoom, senderId, answer);
@@ -286,8 +392,10 @@ async function handleAnswer(senderId, answer) {
     try {
         const pc = peerConnections[senderId];
         if (pc) {
-            await pc.setRemoteDescription(answer);
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
             console.log("✅ Answer processed!");
+        } else {
+            console.error("⚠️ No peer connection found for:", senderId);
         }
     } catch (error) {
         console.error("❌ Error in handleAnswer:", error);
@@ -299,11 +407,12 @@ async function handleIceCandidate(senderId, candidate) {
     
     try {
         const pc = peerConnections[senderId];
-        if (pc) {
-            await pc.addIceCandidate(candidate);
+        if (pc && candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log("✅ ICE candidate added");
         }
     } catch (error) {
-        console.error("❌ Error in handleIceCandidate:", error);
+        console.error("❌ Error adding ICE candidate:", error);
     }
 }
 
@@ -391,6 +500,19 @@ function translatePhase(phase) {
     return phases[phase] || phase;
 }
 
+// Debug: نمایش وضعیت connections
+function debugConnections() {
+    console.log("🔍 Debug - Active connections:");
+    Object.keys(peerConnections).forEach(id => {
+        const pc = peerConnections[id];
+        console.log(`- ${id}:`, {
+            connectionState: pc.connectionState,
+            iceConnectionState: pc.iceConnectionState,
+            signalingState: pc.signalingState
+        });
+    });
+}
+
 // ===== Event Listeners =====
 
 // Enter key برای چت
@@ -402,8 +524,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Debug button
+    window.debugConnections = debugConnections;
+    
     console.log("✅ game.js loaded successfully!");
 });
 
 // Log version
-console.log("🎮 Mafia Game v1.0 - Ready!");
+console.log("🎮 Mafia Game v1.1 - With Video Fix!");
